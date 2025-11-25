@@ -1,45 +1,31 @@
 import fetch from "node-fetch";
-import * as cheerio from "cheerio";
 
 export default async function handler(req, res) {
     const url = req.query.url;
-
-    if (!url) {
-        return res.status(400).json({ error: "URL parametresi eksik." });
-    }
+    if (!url) return res.status(400).json({ error: "URL parametresi eksik." });
 
     try {
-        const response = await fetch(url, {
+        // Ürün ID'sini URL'den çek
+        const match = url.match(/,(\d+)\.html/);
+        if (!match) return res.status(400).json({ error: "Ürün ID bulunamadı." });
+
+        const productId = match[1];
+
+        // Akakçe API çağrısı
+        const apiUrl = `https://api6.akakce.com/product/${productId}/prices`;
+
+        const response = await fetch(apiUrl, {
             headers: { "User-Agent": "Mozilla/5.0" }
         });
 
-        const html = await response.text();
-        const $ = cheerio.load(html);
+        const data = await response.json();
 
-        const productName = $("h1").first().text().trim();
-        let sellers = [];
-
-        $(".pt_v8, .pn_v8, .v_v8").each((i, el) => {
-            const priceText = $(el).text().trim();
-            const priceMatch = priceText.match(/[\d,.]+/);
-
-            if (priceMatch) {
-                sellers.push({
-                    seller: "Satıcı " + (i + 1),
-                    price: priceMatch[0]
-                });
-            }
-        });
-
-        const sorted = sellers.sort((a, b) =>
-            parseFloat(a.price.replace(",", ".")) -
-            parseFloat(b.price.replace(",", "."))
-        );
+        // En ucuz fiyatı bul
+        const prices = data.result?.products?.[0]?.qvPrices || [];
 
         res.status(200).json({
-            product: productName,
-            sellers: sorted,
-            cheapest: sorted[0] || null
+            productId,
+            prices
         });
 
     } catch (error) {
